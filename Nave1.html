@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diseño de Nave - Storm Studios</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { margin: 0; background: #0f0f13; color: white; overflow: hidden; }
+        #canvas-container { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useEffect, useRef } = React;
+        const { createRoot } = ReactDOM;
+        const THREE = window.THREE;
+
+        // --- INICIO DEL CÓDIGO DE DISEÑO DE LA NAVE ---
+        // Copia esta función y las constantes de color para integrarlas en el juego principal
+        
+        const SHIP_COLORS = {
+            body: 0xe0e0e0,      // Blanco grisáceo
+            dark: 0x2a2a2a,      // Gris oscuro mecánico
+            orange: 0xff8c00,    // Naranja distintivo de la imagen
+            glass: 0x22aaff,     // Cristal azulado
+            glow: 0xffaa00       // Brillo de motor
+        };
+
+        const createDetailedSpaceship = () => {
+            const shipGroup = new THREE.Group();
+
+            // Materiales reutilizables
+            const matBody = new THREE.MeshStandardMaterial({ color: SHIP_COLORS.body, roughness: 0.3, metalness: 0.5 });
+            const matDark = new THREE.MeshStandardMaterial({ color: SHIP_COLORS.dark, roughness: 0.7, metalness: 0.3 });
+            const matOrange = new THREE.MeshStandardMaterial({ color: SHIP_COLORS.orange, roughness: 0.4, metalness: 0.2 });
+            const matGlass = new THREE.MeshStandardMaterial({ color: SHIP_COLORS.glass, transparent: true, opacity: 0.6, metalness: 0.9, roughness: 0.1 });
+            const matGlow = new THREE.MeshBasicMaterial({ color: SHIP_COLORS.glow });
+
+            // 1. Fuselaje Central (Cuerpo principal)
+            const fuselageGeo = new THREE.BoxGeometry(1.2, 0.8, 3.5);
+            // Modificar vértices para afilar la nariz
+            const pos = fuselageGeo.attributes.position;
+            for(let i=0; i < pos.count; i++){
+                if(pos.getZ(i) > 1) { // Parte frontal
+                    pos.setX(i, pos.getX(i) * 0.6); // Estrechar nariz
+                    pos.setY(i, pos.getY(i) * 0.7); // Aplanar nariz
+                }
+            }
+            fuselageGeo.computeVertexNormals();
+            const fuselage = new THREE.Mesh(fuselageGeo, matBody);
+            shipGroup.add(fuselage);
+
+            // 2. Cabina (Cockpit)
+            const cockpitGeo = new THREE.BufferGeometry();
+            // Geometría personalizada simple para la forma de cuña de la cabina
+            const cockpitVertices = new Float32Array([
+                // Top point
+                0, 0.6, -0.5,
+                // Base quad
+                -0.4, 0.3, 0.5,
+                0.4, 0.3, 0.5,
+                0.4, 0.3, -1.0,
+                -0.4, 0.3, -1.0
+            ]);
+            // Usaremos BoxGeometry rotada y escalada para simplificar la integración sin vértices complejos manuales
+            const glassMesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 1.8), matGlass);
+            glassMesh.position.set(0, 0.5, 0.2);
+            glassMesh.rotation.x = -0.1;
+            shipGroup.add(glassMesh);
+            
+            // Marcos de la cabina (Estructura blanca sobre el cristal)
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.1, 1.9), matBody);
+            frame.position.set(0, 0.45, 0.2);
+            frame.rotation.x = -0.1;
+            shipGroup.add(frame);
+
+            // 3. Nariz (Detalle naranja frontal)
+            const noseTip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, 0.5), matOrange);
+            noseTip.position.set(0, 0, 1.9);
+            shipGroup.add(noseTip);
+
+            // 4. Motores Laterales (Grandes tomas de aire hexagonales/cuadradas)
+            const createEngine = (isLeft) => {
+                const group = new THREE.Group();
+                const xOffset = isLeft ? -1.1 : 1.1;
+
+                // Cuerpo del motor
+                const engineBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 2.5), matDark);
+                
+                // Detalle superior del motor (blanco)
+                const engineTop = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 1.8), matBody);
+                engineTop.position.y = 0.41;
+
+                // Toma de aire (Frontal)
+                const intake = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.1), matDark);
+                intake.position.z = 1.2;
+                
+                // Brillo interior toma de aire
+                const intakeGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), matGlow);
+                intakeGlow.position.z = 1.26;
+                intakeGlow.rotation.y = Math.PI; // Mirar hacia adelante (relativo a cámara, pero aquí es local)
+                
+                // Propulsor (Trasero)
+                const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.2, 16), matDark);
+                thruster.rotation.x = Math.PI / 2;
+                thruster.position.z = -1.3;
+
+                const thrusterGlow = new THREE.Mesh(new THREE.CircleGeometry(0.15, 16), matGlow);
+                thrusterGlow.position.z = -1.41;
+                thrusterGlow.rotation.x = Math.PI;
+
+                // Ensamblar motor
+                group.add(engineBody);
+                group.add(engineTop);
+                group.add(intake);
+                group.add(intakeGlow);
+                group.add(thruster);
+                group.add(thrusterGlow);
+
+                // Posicionar el grupo del motor
+                group.position.set(xOffset, 0, -0.5);
+                return group;
+            };
+
+            shipGroup.add(createEngine(true));  // Izquierdo
+            shipGroup.add(createEngine(false)); // Derecho
+
+            // 5. Alas (Anguladas hacia abajo y naranjas)
+            const createWing = (isLeft) => {
+                const wingGeo = new THREE.BoxGeometry(2.5, 0.05, 1.2);
+                const wing = new THREE.Mesh(wingGeo, matOrange);
+                
+                // Ajustar posición y rotación
+                const xDir = isLeft ? -1 : 1;
+                wing.position.set(xDir * 2.2, -0.2, -0.5);
+                
+                // Rotaciones para dar el efecto aerodinámico
+                wing.rotation.z = isLeft ? 0.2 : -0.2; // Caída hacia abajo (diedro negativo)
+                wing.rotation.y = isLeft ? -0.2 : 0.2; // Flecha hacia atrás
+                
+                // Detalle blanco en el borde del ala
+                const wingTip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 1.2), matBody);
+                wingTip.position.x = xDir * 1.2; // Relativo al centro del ala
+                wing.add(wingTip);
+
+                return wing;
+            };
+
+            shipGroup.add(createWing(true));
+            shipGroup.add(createWing(false));
+
+            // 6. Aletas traseras (Estabilizadores verticales)
+            const createFin = (isLeft) => {
+                const finGeo = new THREE.BoxGeometry(0.1, 0.8, 0.8);
+                // Inclinar geometría
+                const pos = finGeo.attributes.position;
+                for(let i=0; i<pos.count; i++){
+                    if(pos.getY(i) > 0) {
+                        pos.setZ(i, pos.getZ(i) - 0.4); // Inclinar hacia atrás
+                    }
+                }
+                finGeo.computeVertexNormals();
+                
+                const fin = new THREE.Mesh(finGeo, matBody);
+                const xOffset = isLeft ? -0.8 : 0.8;
+                fin.position.set(xOffset, 0.6, -1.0);
+                fin.rotation.z = isLeft ? 0.3 : -0.3; // Inclinación hacia afuera
+
+                // Detalle naranja en la aleta
+                const finDetail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.3), matOrange);
+                finDetail.position.y = 0.2;
+                fin.add(finDetail);
+
+                return fin;
+            };
+
+            shipGroup.add(createFin(true));
+            shipGroup.add(createFin(false));
+
+            // Ajuste final: La nave mira hacia -Z en Three.js por defecto para movimiento,
+            // pero en el código original miraba hacia +Z o -Z dependiendo de la cámara.
+            // Rotamos todo el grupo para que la nariz apunte a donde debe.
+            shipGroup.rotation.y = Math.PI; 
+
+            // Datos para el juego (luces y referencias para animar)
+            shipGroup.userData = {
+                engine: { material: matGlow }, // Referencia para parpadear al acelerar
+                engineLight: { intensity: 1 }  // Mock para compatibilidad
+            };
+
+            // Escalar un poco para que coincida con el tamaño del mundo del juego
+            shipGroup.scale.set(0.5, 0.5, 0.5);
+
+            return shipGroup;
+        };
+        // --- FIN DEL CÓDIGO DE DISEÑO ---
+
+        const Viewer = () => {
+            const mountRef = useRef(null);
+
+            useEffect(() => {
+                // Setup básico de escena para visualizar
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x111111);
+                
+                const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+                camera.position.set(4, 3, 6);
+                camera.lookAt(0, 0, 0);
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                mountRef.current.appendChild(renderer.domElement);
+
+                // Iluminación para que se vean bien los materiales
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+                scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+                dirLight.position.set(5, 10, 7);
+                scene.add(dirLight);
+
+                const backLight = new THREE.PointLight(0x00aaff, 0.5);
+                backLight.position.set(-5, -2, -5);
+                scene.add(backLight);
+
+                // Añadir la nave
+                const ship = createDetailedSpaceship();
+                scene.add(ship);
+
+                // Grid para referencia
+                const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+                scene.add(gridHelper);
+
+                // Animación
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    ship.rotation.y += 0.005; // Rotar para ver todos los ángulos
+                    // Simular flotación
+                    ship.position.y = Math.sin(Date.now() * 0.001) * 0.1;
+                    renderer.render(scene, camera);
+                };
+                animate();
+
+                // Resize handler
+                const handleResize = () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                };
+                window.addEventListener('resize', handleResize);
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    mountRef.current.removeChild(renderer.domElement);
+                };
+            }, []);
+
+            return <div ref={mountRef} id="canvas-container" />;
+        };
+
+        const App = () => {
+            return (
+                <div className="relative">
+                    <div className="absolute top-4 left-4 bg-black/80 p-4 rounded border border-orange-500 text-white font-sans z-10">
+                        <h2 className="text-xl font-bold text-orange-400 mb-2">Visor de Diseño</h2>
+                        <p className="text-sm text-gray-300 max-w-xs">
+                            Esta es la nueva función <code>createDetailedSpaceship</code>.
+                            Incluye los colores naranja/blanco y la geometría angulada de la imagen.
+                        </p>
+                    </div>
+                    <Viewer />
+                </div>
+            );
+        };
+
+        createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
